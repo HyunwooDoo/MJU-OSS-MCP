@@ -19,3 +19,8 @@
 ## 협업 규칙
 - `Commit Convention`: Conventional Commits 규칙 (feat:, fix:, refactor:, chore: 등)
 - `Pull Request`: feature → develop로 PR, 최소 1명 이상 승인 후 머지
+
+<br>
+<br>
+# sample_proj3
+My name is 이은비
