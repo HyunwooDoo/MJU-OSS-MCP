@@ -23,4 +23,4 @@
 <br>
 <br>
 # sample_proj3
-My name is 이은비
+My name is 이은비.
