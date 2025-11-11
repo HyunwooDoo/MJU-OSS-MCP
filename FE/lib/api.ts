@@ -45,7 +45,6 @@ export const searchFlightsViaMCP = async (
     { code: "ANA", name: "전일본공수", logo: "🇯🇵" },
     { code: "EK", name: "에미레이트", logo: "🇦🇪" },
     { code: "QR", name: "카타르항공", logo: "🇶🇦" },
-    { code: "SQ", name: "싱가포르항공", logo: "🇸🇬" },
   ];
 
   return optimalDates
