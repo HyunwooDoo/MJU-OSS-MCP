@@ -37,6 +37,7 @@ export const searchFlightsViaMCP = async (
   const optimalDates = generateOptimalDates();
 
   const airlines = [
+    { code: "KE", name: "대한항공", logo: "🇰🇷" },
     { code: "OZ", name: "아시아나항공", logo: "🇰🇷" },
     { code: "AF", name: "에어프랑스", logo: "🇫🇷" },
     { code: "LH", name: "루프트한자", logo: "🇩🇪" },
