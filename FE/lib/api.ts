@@ -37,15 +37,14 @@ export const searchFlightsViaMCP = async (
   const optimalDates = generateOptimalDates();
 
   const airlines = [
-    { code: 'KE', name: '대한항공', logo: '🇰🇷' },
-    { code: 'OZ', name: '아시아나항공', logo: '🇰🇷' },
-    { code: 'AF', name: '에어프랑스', logo: '🇫🇷' },
-    { code: 'LH', name: '루프트한자', logo: '🇩🇪' },
-    { code: 'JL', name: '일본항공', logo: '🇯🇵' },
-    { code: 'ANA', name: '전일본공수', logo: '🇯🇵' },
-    { code: 'EK', name: '에미레이트', logo: '🇦🇪' },
-    { code: 'QR', name: '카타르항공', logo: '🇶🇦' },
-    { code: 'SQ', name: '싱가포르항공', logo: '🇸🇬' }
+    { code: "OZ", name: "아시아나항공", logo: "🇰🇷" },
+    { code: "AF", name: "에어프랑스", logo: "🇫🇷" },
+    { code: "LH", name: "루프트한자", logo: "🇩🇪" },
+    { code: "JL", name: "일본항공", logo: "🇯🇵" },
+    { code: "ANA", name: "전일본공수", logo: "🇯🇵" },
+    { code: "EK", name: "에미레이트", logo: "🇦🇪" },
+    { code: "QR", name: "카타르항공", logo: "🇶🇦" },
+    { code: "SQ", name: "싱가포르항공", logo: "🇸🇬" },
   ];
 
   return optimalDates
