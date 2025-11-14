@@ -1,13 +1,19 @@
+#타입 어노테이션 평가 방식을 변화시키는 모듈
 from __future__ import annotations
 
+#로그를 분류하고 관리하기 위한 모듈
 import logging
+
+#타입 힌트로 사용되는 모듈
 from typing import Any, Dict, List
 
+#HTTP 클라이언트 라이브러리
 import requests
 
+#프로젝트 환경설정 값을 가져오는 모듈
 from mcp_server.core.config import get_settings
 
-
+#SkyScanner API와 상호작용하는 어댑터 클래스
 class SkyScannerAdapter:
     """Adapter responsible for communicating with the SkyScanner Flights API."""
 
