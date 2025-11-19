@@ -56,8 +56,9 @@ class LLMService:
         #최종 항공권 리스트 반환
         return flights
 
-    #MCP로부터 항공권 정보를 가져오는 내부 메서드
+    #MCP 서버에 JSON-RPC 요청을 보내 항공권 정보를 받아 Flight 객체 리스트로 변환 및 반환
     def _fetch_from_mcp(self, request: FlightSearchRequest) -> List[Flight]:
+        #JSON-RPC 요청 메시지 구성
         payload = {
             "jsonrpc": "2.0",
             "method": "searchFlights",
@@ -65,10 +66,13 @@ class LLMService:
             "id": "flight-search",
         }
 
+        #Content-Type 헤더 지정 
+        #API 키가 있으면 Authorization 헤더 추가
         headers: Dict[str, str] = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
+        #MCP 서버에 POST 요청 전송
         response = httpx.post(
             self.rpc_url,
             json=payload,
@@ -77,17 +81,20 @@ class LLMService:
         )
         response.raise_for_status()
 
+        #응답 중 에러 정보 확인 및 예외 처리
         data = response.json()
         error = data.get("error")
         if error:
             message = error.get("message", "Unknown MCP error")
             raise RuntimeError(message)
 
+        #결과 데이터에서 항공권 정보 추출 및 매핑
         flights_data = data.get("result", {}).get("flights", [])
         return self._map_flights(request, flights_data)
 
-    #항공권 검색 요청 객체를 JSON-RPC 파라미터로 변환
+    #FlightSearchRequest 객체를 JSON-RPC 호출에 필요한 파라미터 딕셔너리로 변환
     def _build_params(self, request: FlightSearchRequest) -> Dict[str, Any]:
+        #요청 파라미터 구성
         params: Dict[str, Any] = {
             "origin": request.origin,
             "destination": request.destination,
@@ -95,6 +102,7 @@ class LLMService:
             "return_date": request.return_date.isoformat() if request.return_date else None,
             "passengers": request.passengers,
         }
+        #None 값이 아닌 파라미터만 필터링하여 반환
         return {key: value for key, value in params.items() if value is not None}
 
     #MCP로부터 받은 항공권 데이터를 Flight 객체 리스트로 매핑
@@ -103,8 +111,10 @@ class LLMService:
         request: FlightSearchRequest,
         flights: Iterable[Dict[str, Any]],
     ) -> List[Flight]:
+        #매핑된 Flight 객체를 담을 리스트 초기화
         mapped: List[Flight] = []
 
+        #각 항공권 데이터를 순회하며 Flight 객체로 변환
         for index, flight_data in enumerate(flights, start=1):
             mapped.append(
                 Flight(
@@ -128,10 +138,12 @@ class LLMService:
                 )
             )
 
+        #매핑된 Flight 객체 리스트 반환
         return mapped
 
-    #MCP 오류 시 기본값 항공권 객체 생성
+    #MCP 오류 시 기본 대체용 Flight 객체 생성
     def _build_fallback_flight(self, request: FlightSearchRequest) -> Flight:
+        #기본 대체용 Flight 객체 생성 및 반환
         return Flight(
             id=0,
             origin=request.origin,
@@ -142,12 +154,13 @@ class LLMService:
             price=0,
         )
 
-    #값이 None 또는 빈 문자열일 경우 기본값 반환
+    #입력값이 None 또는 빈 문자열일 경우 기본값 반환
     @staticmethod
     def _coalesce(value: Optional[Any], default: Any) -> Any:
         return value if value not in (None, "") else default
 
-    #날짜 문자열을 date 객체로 파싱, 실패 시 기본값 반환
+    #입력 값이 date 객체인지 확인, 문자열이면 ISO 형식으로 파싱
+    #변환 실패 혹은 유효하지 않은 타입일 경우 기본값 반환
     @staticmethod
     def _parse_date(value: Any, default: date) -> date:
         if isinstance(value, date):
@@ -159,7 +172,8 @@ class LLMService:
                 return default
         return default
 
-    #옵셔널 날짜 문자열을 date 객체로 파싱, 실패 시 기본값 반환
+    #입력값이 None일 경우 기본값 반환
+    #날짜 객체 또는 ISO 형식 문자열일 경우 date 객체로 안전하게 변환 및 반환
     @staticmethod
     def _parse_optional_date(value: Any, default: Optional[date]) -> Optional[date]:
         if value is None:
@@ -173,7 +187,8 @@ class LLMService:
                 return default
         return default
 
-    #가격 값을 정수로 파싱, 실패 시 None 반환
+    #가격 필드 값이 None일 경우 None 반환
+    #정수, 실수, 문자열 형태의 숫자 값을 안전하게 정수로 변환하여 반환
     @staticmethod
     def _parse_price(value: Any) -> Optional[int]:
         if value is None:
