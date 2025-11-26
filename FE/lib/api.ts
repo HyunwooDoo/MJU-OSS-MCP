@@ -4,28 +4,19 @@ import { destinations } from "@/constants";
 const BE_SERVER_URL =
   process.env.NEXT_PUBLIC_BE_SERVER_URL || "http://localhost:8000";
 
-// mcp_server 응답 형식
-interface MCPFlight {
+// BE API 응답 형식
+interface BEFlight {
+  id: number;
   origin: string;
   destination: string;
-  departure_date?: string;
-  return_date?: string;
-  airline: string;
-  price: number;
+  departure_date: string;
+  return_date: string | null;
+  airline: string | null;
+  price: number | null;
 }
 
-interface MCPResponse {
-  jsonrpc: string;
-  result?: {
-    flights: MCPFlight[];
-    cheapest?: MCPFlight;
-  };
-  error?: {
-    code: number;
-    message: string;
-    data?: any;
-  };
-  id: string | number;
+interface BESearchResponse {
+  results: BEFlight[];
 }
 
 // 항공사 코드 매핑 (항공사 이름에서 코드 추출)
@@ -55,15 +46,15 @@ const getAirlineCode = (airlineName: string): string => {
     .replace(/[^A-Z]/g, "");
 };
 
-// mcp_server 응답을 FE의 FlightData 형식으로 변환
-const transformMCPFlightToFlightData = (
-  mcpFlight: MCPFlight,
+// BE API 응답을 FE의 FlightData 형식으로 변환
+const transformBEFlightToFlightData = (
+  beFlight: BEFlight,
   index: number,
   duration: number
 ): FlightData => {
   // 날짜 파싱
-  const departureDate = mcpFlight.departure_date || "";
-  const returnDate = mcpFlight.return_date || "";
+  const departureDate = beFlight.departure_date || "";
+  const returnDate = beFlight.return_date || "";
 
   // 기본 시간 생성 (실제 API에서 제공되지 않을 경우)
   const departureHour = 8 + (index % 12);
@@ -73,13 +64,14 @@ const transformMCPFlightToFlightData = (
   const arrivalMinute = (departureMinute + 30) % 60;
 
   // 가격 기반 절감액 계산 (실제 API에서 제공되지 않을 경우)
-  const basePrice = mcpFlight.price * 1.2; // 20% 할인 가정
-  const savings = Math.floor(basePrice - mcpFlight.price);
+  const price = beFlight.price || 0;
+  const basePrice = price * 1.2; // 20% 할인 가정
+  const savings = Math.floor(basePrice - price);
 
   return {
-    id: `flight-${index + 1}`,
-    airline: mcpFlight.airline,
-    airlineCode: getAirlineCode(mcpFlight.airline),
+    id: `flight-${beFlight.id}`,
+    airline: beFlight.airline || "Unknown Airline",
+    airlineCode: getAirlineCode(beFlight.airline || "Unknown"),
     departureTime: `${departureHour
       .toString()
       .padStart(2, "0")}:${departureMinute.toString().padStart(2, "0")}`,
@@ -89,7 +81,7 @@ const transformMCPFlightToFlightData = (
     duration: `${Math.floor(flightDuration)}시간 ${Math.floor(
       (flightDuration % 1) * 60
     )}분`,
-    price: mcpFlight.price,
+    price: price,
     stops: index % 3 === 0 ? 1 : 0, // 일부 항공편은 경유
     aircraft: ["Boeing 777", "Airbus A350", "Boeing 787", "Airbus A380"][
       index % 4
@@ -146,54 +138,42 @@ export const searchFlightsViaMCP = async (
     // 월과 기간을 기반으로 여러 날짜 구간 생성
     const dateRanges = generateDatesForMonth(month, duration, 5);
 
-    // 각 날짜 구간에 대해 mcp_server 호출
+    // 각 날짜 구간에 대해 BE API 호출
     const allFlights: FlightData[] = [];
 
     for (const dateRange of dateRanges) {
       try {
-        // JSON-RPC 요청 생성
-        const jsonRpcRequest = {
-          jsonrpc: "2.0",
-          method: "searchFlights",
-          params: {
-            origin: origin,
-            destination: destinationAirport,
-            departure_date: dateRange.departureDate,
-            return_date: dateRange.returnDate,
-          },
-          id: `req-${dateRange.departureDate}`,
+        // BE API 요청 생성
+        const searchRequest = {
+          origin: origin,
+          destination: destinationAirport,
+          departure_date: dateRange.departureDate,
+          return_date: dateRange.returnDate,
+          passengers: 1,
         };
 
-        // mcp_server에 요청 전송
-        const response = await fetch(`${BE_SERVER_URL}/rpc`, {
+        // BE API에 요청 전송
+        const response = await fetch(`${BE_SERVER_URL}/api/v1/search/flights`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(jsonRpcRequest),
+          body: JSON.stringify(searchRequest),
         });
 
         if (!response.ok) {
           console.warn(
-            `MCP 서버 응답 오류 (${response.status}): ${response.statusText}`
+            `BE 서버 응답 오류 (${response.status}): ${response.statusText}`
           );
           continue;
         }
 
-        const data: MCPResponse = await response.json();
-
-        // 에러 처리
-        if (data.error) {
-          console.error(
-            `MCP 서버 에러: ${data.error.code} - ${data.error.message}`
-          );
-          continue;
-        }
+        const data: BESearchResponse = await response.json();
 
         // 응답 데이터 변환
-        if (data.result?.flights) {
-          const transformedFlights = data.result.flights.map((flight, index) =>
-            transformMCPFlightToFlightData(
+        if (data.results && data.results.length > 0) {
+          const transformedFlights = data.results.map((flight, index) =>
+            transformBEFlightToFlightData(
               flight,
               allFlights.length + index,
               duration
@@ -218,11 +198,11 @@ export const searchFlightsViaMCP = async (
 
     // 결과가 없으면 폴백: mock 데이터 반환
     console.warn(
-      "MCP 서버에서 결과를 받지 못했습니다. Mock 데이터를 사용합니다."
+      "BE 서버에서 결과를 받지 못했습니다. Mock 데이터를 사용합니다."
     );
     return generateMockFlights(destination, duration, month);
   } catch (error) {
-    console.error("MCP 서버 호출 중 오류 발생:", error);
+    console.error("BE 서버 호출 중 오류 발생:", error);
     // 에러 발생 시 폴백: mock 데이터 반환
     return generateMockFlights(destination, duration, month);
   }
@@ -307,7 +287,7 @@ const generateMockFlights = (
  */
 export const getSavedTrips = async (): Promise<SavedTrip[]> => {
   try {
-    const response = await fetch(`${BE_SERVER_URL}/api/v1/saved`, {
+    const response = await fetch(`${BE_SERVER_URL}/api/v1/saved/flights`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -322,9 +302,34 @@ export const getSavedTrips = async (): Promise<SavedTrip[]> => {
       throw new Error(`서버 오류: ${response.status}`);
     }
 
-    const data = await response.json();
-    // BE 응답 형식에 따라 조정 필요 (배열이거나 객체 안에 배열이 있을 수 있음)
-    return Array.isArray(data) ? data : data.trips || data.data || [];
+    const data: BEFlight[] = await response.json();
+    // BE의 Flight 배열을 SavedTrip 배열로 변환
+    // BE에는 SavedTrip 개념이 없으므로, Flight 데이터를 기반으로 변환
+    // 실제로는 BE에 SavedTrip 스키마가 필요할 수 있음
+    return data.map((flight, index) => {
+      // Flight에서 목적지 정보 추출 (destination 필드 사용)
+      const destinationInfo = destinations.find(
+        (d) => d.airport === flight.destination
+      );
+
+      return {
+        id: flight.id.toString(),
+        destination: destinationInfo?.name || flight.destination,
+        destinationId: destinationInfo?.id || flight.destination,
+        country: destinationInfo?.country || "",
+        airport: flight.destination,
+        duration: flight.return_date
+          ? Math.ceil(
+              (new Date(flight.return_date).getTime() -
+                new Date(flight.departure_date).getTime()) /
+                (1000 * 60 * 60 * 24)
+            )
+          : 0,
+        month: flight.departure_date.substring(0, 7), // YYYY-MM 형식
+        flight: transformBEFlightToFlightData(flight, index, 0),
+        savedAt: new Date().toISOString(), // BE에 savedAt이 없으므로 현재 시간 사용
+      };
+    });
   } catch (error) {
     console.error("저장된 여행 목록 조회 중 오류:", error);
     // BE 서버가 없거나 오류 발생 시 localStorage 폴백
@@ -339,12 +344,22 @@ export const saveTrip = async (
   trip: Omit<SavedTrip, "id" | "savedAt">
 ): Promise<SavedTrip | null> => {
   try {
-    const response = await fetch(`${BE_SERVER_URL}/api/v1/saved`, {
+    // BE의 FlightCreate 스키마에 맞게 변환
+    const flightCreate = {
+      origin: "ICN", // 기본 출발지
+      destination: trip.airport,
+      departure_date: trip.flight.departureDate,
+      return_date: trip.flight.returnDate,
+      airline: trip.flight.airline,
+      price: trip.flight.price,
+    };
+
+    const response = await fetch(`${BE_SERVER_URL}/api/v1/saved/flights`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(trip),
+      body: JSON.stringify(flightCreate),
     });
 
     if (!response.ok) {
@@ -355,8 +370,23 @@ export const saveTrip = async (
       throw new Error(`서버 오류: ${response.status}`);
     }
 
-    const data = await response.json();
-    return data;
+    const data: BEFlight = await response.json();
+    // BE의 Flight을 SavedTrip으로 변환
+    const destinationInfo = destinations.find(
+      (d) => d.airport === data.destination
+    );
+
+    return {
+      id: data.id.toString(),
+      destination: destinationInfo?.name || data.destination,
+      destinationId: destinationInfo?.id || data.destination,
+      country: destinationInfo?.country || "",
+      airport: data.destination,
+      duration: trip.duration,
+      month: trip.month,
+      flight: transformBEFlightToFlightData(data, 0, trip.duration),
+      savedAt: new Date().toISOString(),
+    };
   } catch (error) {
     console.error("여행 저장 중 오류:", error);
     // BE 서버가 없거나 오류 발생 시 localStorage 폴백
@@ -369,12 +399,22 @@ export const saveTrip = async (
  */
 export const deleteTrip = async (tripId: string): Promise<boolean> => {
   try {
-    const response = await fetch(`${BE_SERVER_URL}/api/v1/saved/${tripId}`, {
-      method: "DELETE",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
+    // BE는 flight_id를 int로 받으므로 변환
+    const flightId = parseInt(tripId, 10);
+    if (isNaN(flightId)) {
+      // 숫자가 아니면 localStorage에서 삭제
+      return deleteTripFromLocalStorage(tripId);
+    }
+
+    const response = await fetch(
+      `${BE_SERVER_URL}/api/v1/saved/flights/${flightId}`,
+      {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
 
     if (!response.ok) {
       if (response.status === 404) {
