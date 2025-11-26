@@ -459,11 +459,17 @@ export const searchFlightsByText = async (
     }
 
     const data = await response.json();
-    // BE 응답 형식에 따라 조정 필요
+    // BE 응답 형식에 맞게 변환
+    // BE에서 destination, duration, month를 반환
+    if (!data.destination || !data.duration || !data.month) {
+      console.warn("BE에서 모든 정보를 추출하지 못했습니다:", data);
+      return null;
+    }
+
     return {
-      destination: data.destination || data.destinationId || "",
-      duration: data.duration || data.days || 0,
-      month: data.month || data.departureMonth || "",
+      destination: data.destination,
+      duration: data.duration,
+      month: data.month,
     };
   } catch (error) {
     console.error("텍스트 검색 중 오류:", error);
