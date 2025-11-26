@@ -1,10 +1,5 @@
 import type { FlightData, SavedTrip } from "@/types";
 import { destinations } from "@/constants";
-
-// MCP 서버 기본 URL (환경 변수로 설정 가능)
-const MCP_SERVER_URL =
-  process.env.NEXT_PUBLIC_MCP_SERVER_URL || "http://localhost:8001";
-
 // BE 서버 기본 URL (환경 변수로 설정 가능)
 const BE_SERVER_URL =
   process.env.NEXT_PUBLIC_BE_SERVER_URL || "http://localhost:8000";
@@ -170,7 +165,7 @@ export const searchFlightsViaMCP = async (
         };
 
         // mcp_server에 요청 전송
-        const response = await fetch(`${MCP_SERVER_URL}/rpc`, {
+        const response = await fetch(`${BE_SERVER_URL}/rpc`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
