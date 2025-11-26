@@ -1,9 +1,13 @@
-import type { FlightData } from "@/types";
+import type { FlightData, SavedTrip } from "@/types";
 import { destinations } from "@/constants";
 
 // MCP 서버 기본 URL (환경 변수로 설정 가능)
 const MCP_SERVER_URL =
   process.env.NEXT_PUBLIC_MCP_SERVER_URL || "http://localhost:8001";
+
+// BE 서버 기본 URL (환경 변수로 설정 가능)
+const BE_SERVER_URL =
+  process.env.NEXT_PUBLIC_BE_SERVER_URL || "http://localhost:8000";
 
 // mcp_server 응답 형식
 interface MCPFlight {
@@ -299,4 +303,201 @@ const generateMockFlights = (
       };
     })
     .sort((a, b) => a.price - b.price);
+};
+
+// ==================== 저장된 여행 관련 API ====================
+
+/**
+ * 저장된 여행 목록 조회
+ */
+export const getSavedTrips = async (): Promise<SavedTrip[]> => {
+  try {
+    const response = await fetch(`${BE_SERVER_URL}/api/v1/saved`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        // 엔드포인트가 없으면 빈 배열 반환 (BE가 아직 구현되지 않은 경우)
+        return [];
+      }
+      throw new Error(`서버 오류: ${response.status}`);
+    }
+
+    const data = await response.json();
+    // BE 응답 형식에 따라 조정 필요 (배열이거나 객체 안에 배열이 있을 수 있음)
+    return Array.isArray(data) ? data : data.trips || data.data || [];
+  } catch (error) {
+    console.error("저장된 여행 목록 조회 중 오류:", error);
+    // BE 서버가 없거나 오류 발생 시 localStorage 폴백
+    return getSavedTripsFromLocalStorage();
+  }
+};
+
+/**
+ * 여행 저장
+ */
+export const saveTrip = async (
+  trip: Omit<SavedTrip, "id" | "savedAt">
+): Promise<SavedTrip | null> => {
+  try {
+    const response = await fetch(`${BE_SERVER_URL}/api/v1/saved`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(trip),
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        // BE가 아직 구현되지 않은 경우 localStorage 사용
+        return saveTripToLocalStorage(trip);
+      }
+      throw new Error(`서버 오류: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("여행 저장 중 오류:", error);
+    // BE 서버가 없거나 오류 발생 시 localStorage 폴백
+    return saveTripToLocalStorage(trip);
+  }
+};
+
+/**
+ * 여행 삭제
+ */
+export const deleteTrip = async (tripId: string): Promise<boolean> => {
+  try {
+    const response = await fetch(`${BE_SERVER_URL}/api/v1/saved/${tripId}`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        // BE가 아직 구현되지 않은 경우 localStorage 사용
+        return deleteTripFromLocalStorage(tripId);
+      }
+      throw new Error(`서버 오류: ${response.status}`);
+    }
+
+    return true;
+  } catch (error) {
+    console.error("여행 삭제 중 오류:", error);
+    // BE 서버가 없거나 오류 발생 시 localStorage 폴백
+    return deleteTripFromLocalStorage(tripId);
+  }
+};
+
+// ==================== 텍스트 검색 관련 API ====================
+
+/**
+ * 텍스트로 여행 정보 검색 (LLM 기반)
+ */
+export const searchFlightsByText = async (
+  text: string
+): Promise<{ destination: string; duration: number; month: string } | null> => {
+  try {
+    const response = await fetch(`${BE_SERVER_URL}/api/v1/search`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ query: text }),
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        // BE가 아직 구현되지 않은 경우 null 반환
+        console.warn("BE 검색 API가 아직 구현되지 않았습니다.");
+        return null;
+      }
+      throw new Error(`서버 오류: ${response.status}`);
+    }
+
+    const data = await response.json();
+    // BE 응답 형식에 따라 조정 필요
+    return {
+      destination: data.destination || data.destinationId || "",
+      duration: data.duration || data.days || 0,
+      month: data.month || data.departureMonth || "",
+    };
+  } catch (error) {
+    console.error("텍스트 검색 중 오류:", error);
+    return null;
+  }
+};
+
+// ==================== localStorage 폴백 함수 ====================
+
+/**
+ * localStorage에서 저장된 여행 목록 조회 (폴백)
+ */
+const getSavedTripsFromLocalStorage = (): SavedTrip[] => {
+  if (typeof window === "undefined") return [];
+  try {
+    const trips = JSON.parse(localStorage.getItem("savedTrips") || "[]");
+    return trips.sort(
+      (a: SavedTrip, b: SavedTrip) =>
+        new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime()
+    );
+  } catch (error) {
+    console.error("localStorage에서 데이터 읽기 오류:", error);
+    return [];
+  }
+};
+
+/**
+ * localStorage에 여행 저장 (폴백)
+ */
+const saveTripToLocalStorage = (
+  trip: Omit<SavedTrip, "id" | "savedAt">
+): SavedTrip | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    const newTrip: SavedTrip = {
+      ...trip,
+      id: Date.now().toString(),
+      savedAt: new Date().toISOString(),
+    };
+
+    const existingSavedTrips = JSON.parse(
+      localStorage.getItem("savedTrips") || "[]"
+    );
+    const updatedTrips = [...existingSavedTrips, newTrip];
+    localStorage.setItem("savedTrips", JSON.stringify(updatedTrips));
+
+    return newTrip;
+  } catch (error) {
+    console.error("localStorage에 데이터 저장 오류:", error);
+    return null;
+  }
+};
+
+/**
+ * localStorage에서 여행 삭제 (폴백)
+ */
+const deleteTripFromLocalStorage = (tripId: string): boolean => {
+  if (typeof window === "undefined") return false;
+  try {
+    const existingSavedTrips = JSON.parse(
+      localStorage.getItem("savedTrips") || "[]"
+    );
+    const updatedTrips = existingSavedTrips.filter(
+      (trip: SavedTrip) => trip.id !== tripId
+    );
+    localStorage.setItem("savedTrips", JSON.stringify(updatedTrips));
+    return true;
+  } catch (error) {
+    console.error("localStorage에서 데이터 삭제 오류:", error);
+    return false;
+  }
 };

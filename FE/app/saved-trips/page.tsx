@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useDeleteTrip } from "@/hooks/useSavedTrips";
+import { getSavedTrips } from "@/lib/api";
 import type { SavedTrip } from "@/types";
 import { SavedTripCard } from "@/components/SavedTripCard";
 
@@ -11,27 +12,30 @@ export default function SavedTrips() {
   const deleteTrip = useDeleteTrip();
   const [savedTrips, setSavedTrips] = useState<SavedTrip[]>([]);
   const [selectedTrip, setSelectedTrip] = useState<string>("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const loadSavedTrips = () => {
-      if (typeof window !== "undefined") {
-        const trips = JSON.parse(localStorage.getItem("savedTrips") || "[]");
-        setSavedTrips(
-          trips.sort(
-            (a: SavedTrip, b: SavedTrip) =>
-              new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime()
-          )
-        );
+    const loadSavedTrips = async () => {
+      setLoading(true);
+      try {
+        const trips = await getSavedTrips();
+        setSavedTrips(trips);
+      } catch (error) {
+        console.error("저장된 여행 목록 로드 중 오류:", error);
+      } finally {
+        setLoading(false);
       }
     };
 
     loadSavedTrips();
   }, []);
 
-  const handleDeleteTripWithRefresh = (tripId: string) => {
-    deleteTrip(tripId);
-    const updatedTrips = savedTrips.filter((trip) => trip.id !== tripId);
-    setSavedTrips(updatedTrips);
+  const handleDeleteTripWithRefresh = async (tripId: string) => {
+    const success = await deleteTrip(tripId);
+    if (success) {
+      const updatedTrips = savedTrips.filter((trip) => trip.id !== tripId);
+      setSavedTrips(updatedTrips);
+    }
   };
 
   const handleSearchAgain = (trip: SavedTrip) => {
@@ -88,8 +92,18 @@ export default function SavedTrips() {
           </p>
         </div>
 
+        {/* Loading State */}
+        {loading && (
+          <div className="text-center py-16">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mb-4"></div>
+            <h3 className="text-xl font-semibold text-gray-800 mb-2">
+              저장된 여행을 불러오는 중...
+            </h3>
+          </div>
+        )}
+
         {/* Empty State */}
-        {savedTrips.length === 0 && (
+        {!loading && savedTrips.length === 0 && (
           <div className="text-center py-16">
             <div className="text-6xl mb-6">✈️</div>
             <h3 className="text-xl font-semibold text-gray-800 mb-2">
@@ -108,7 +122,7 @@ export default function SavedTrips() {
         )}
 
         {/* Saved Trips List */}
-        {savedTrips.length > 0 && (
+        {!loading && savedTrips.length > 0 && (
           <div className="grid gap-6">
             {savedTrips.map((trip) => (
               <SavedTripCard
@@ -125,7 +139,7 @@ export default function SavedTrips() {
         )}
 
         {/* Bottom Actions */}
-        {savedTrips.length > 0 && (
+        {!loading && savedTrips.length > 0 && (
           <div className="text-center mt-12">
             <button
               onClick={() => router.push("/")}

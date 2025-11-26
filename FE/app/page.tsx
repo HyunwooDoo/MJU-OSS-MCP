@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { destinations, durations, months } from "@/constants";
+import { searchFlightsByText } from "@/lib/api";
 import { DestinationCard } from "@/components/DestinationCard";
 import { DurationCard } from "@/components/DurationCard";
 import { MonthCard } from "@/components/MonthCard";
@@ -13,6 +14,7 @@ export default function Home() {
   const [selectedDuration, setSelectedDuration] = useState<number>(0);
   const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [textInput, setTextInput] = useState<string>("");
+  const [isSearching, setIsSearching] = useState(false);
 
   const handleDestinationSelect = (destinationId: string) => {
     setSelectedDestination(destinationId);
@@ -34,12 +36,32 @@ export default function Home() {
     }
   };
 
-  const handleTextSearch = () => {
-    if (textInput.trim()) {
-      console.log("LLM으로 전달할 데이터:", textInput);
+  const handleTextSearch = async () => {
+    if (!textInput.trim()) return;
+
+    setIsSearching(true);
+    try {
+      // BE API를 통해 텍스트 검색
+      const result = await searchFlightsByText(textInput.trim());
+
+      if (result && result.destination && result.duration && result.month) {
+        // 검색 결과가 있으면 항공권 검색 페이지로 이동
+        router.push(
+          `/flights?destination=${result.destination}&duration=${result.duration}&month=${result.month}`
+        );
+      } else {
+        // BE가 아직 구현되지 않았거나 결과가 없는 경우
+        alert(
+          `입력하신 여행 정보를 분석하여 최적의 항공권을 찾아드리겠습니다:\n\n"${textInput}"\n\n아래에서 목적지, 기간, 월을 선택해주세요.`
+        );
+      }
+    } catch (error) {
+      console.error("텍스트 검색 중 오류:", error);
       alert(
-        `입력하신 여행 정보를 분석하여 최적의 항공권을 찾아드리겠습니다:\n\n"${textInput}"`
+        `검색 중 오류가 발생했습니다. 아래에서 목적지, 기간, 월을 직접 선택해주세요.`
       );
+    } finally {
+      setIsSearching(false);
     }
   };
 
@@ -103,15 +125,24 @@ export default function Home() {
               </span>
               <button
                 onClick={handleTextSearch}
-                disabled={!textInput.trim()}
+                disabled={!textInput.trim() || isSearching}
                 className={`px-6 py-3 rounded-xl text-white font-semibold transition-all duration-300 transform hover:scale-105 whitespace-nowrap ${
-                  textInput.trim()
+                  textInput.trim() && !isSearching
                     ? "bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 shadow-lg hover:shadow-xl cursor-pointer"
                     : "bg-gray-300 cursor-not-allowed"
                 }`}
               >
-                <i className="ri-search-line mr-2"></i>
-                AI로 검색하기
+                {isSearching ? (
+                  <>
+                    <span className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></span>
+                    분석 중...
+                  </>
+                ) : (
+                  <>
+                    <i className="ri-search-line mr-2"></i>
+                    AI로 검색하기
+                  </>
+                )}
               </button>
             </div>
           </div>
